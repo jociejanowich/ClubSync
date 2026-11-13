@@ -11,8 +11,8 @@ export function AuthProvider({ children }) {
   const refresh = useCallback(async () => {
     try {
       const data = await api.me();
-      setUser(data.user);
-      setMemberships(data.memberships);
+      setUser(data.user ?? data);
+      setMemberships(data.memberships ?? []);
     } catch {
       setUser(null);
       setMemberships([]);
