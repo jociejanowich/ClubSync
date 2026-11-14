@@ -27,3 +27,12 @@ class RegisterSerializer(serializers.ModelSerializer):
     # create_user hashes the password instead of saving it as plain text
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+    # Used when claiming a roster-only account: fills it in and sets the password
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password")
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.set_password(password)
+        instance.save()
+        return instance

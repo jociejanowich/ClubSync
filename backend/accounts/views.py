@@ -4,6 +4,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from .models import User
 from .serializers import RegisterSerializer, UserSerializer
 
 
@@ -11,7 +12,15 @@ from .serializers import RegisterSerializer, UserSerializer
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_view(request):
-    serializer = RegisterSerializer(data=request.data)
+    # If an officer already added this email to a roster, the person has a
+    # roster-only account with no password. Registering with that email claims
+    # it, so they keep their club memberships and attendance.
+    email = (request.data.get("email") or "").strip()
+    placeholder = User.objects.filter(email__iexact=email).first() if email else None
+    if placeholder is not None and not placeholder.has_usable_password():
+        serializer = RegisterSerializer(placeholder, data=request.data)
+    else:
+        serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)  # sends back errors if invalid
     user = serializer.save()
     token, _ = Token.objects.get_or_create(user=user)

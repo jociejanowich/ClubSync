@@ -1,4 +1,8 @@
+import re
+
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -64,19 +68,53 @@ class ClubViewSet(viewsets.ModelViewSet):
             )
             return Response(MembershipSerializer(memberships, many=True).data)
 
-        # POST: add a member by username (Officer-only).
+        # POST: add someone to the roster (Officer-only).
+        # Looks them up by email (or username). If they don't have a ClubSync
+        # account yet, a roster-only account is made with no password. They can
+        # claim it later by registering with the same email.
         self._require_officer(club)
-        username = request.data.get("username")
+        email = (request.data.get("email") or "").strip().lower()
+        username = (request.data.get("username") or "").strip()
+        first_name = (request.data.get("first_name") or "").strip()
+        last_name = (request.data.get("last_name") or "").strip()
         role = request.data.get("role", "member")
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            raise ValidationError({"username": "No user with that username exists."})
+
+        if role not in dict(Membership.ROLE_CHOICES):
+            raise ValidationError({"role": "Role must be Officer or General Member."})
+        if not email and not username:
+            raise ValidationError({"email": "Enter the person's email."})
+        if email:
+            try:
+                validate_email(email)
+            except DjangoValidationError:
+                raise ValidationError({"email": "Enter a valid email address."})
+
+        user = None
+        if email:
+            user = User.objects.filter(email__iexact=email).first()
+        if user is None and username:
+            user = User.objects.filter(username__iexact=username).first()
+
+        if user is None:
+            if not email:
+                raise ValidationError({"username": "No user with that username exists. Add them by email instead."})
+            if not first_name or not last_name:
+                raise ValidationError({"detail": "They don't have an account yet, so first and last name are required."})
+            # Username from the email, like jdoe1, with a number added if it's taken
+            base = re.sub(r"[^a-zA-Z0-9_.]", "", email.split("@")[0])[:140] or "member"
+            candidate, n = base, 1
+            while User.objects.filter(username__iexact=candidate).exists():
+                n += 1
+                candidate = f"{base}{n}"
+            user = User(username=candidate, email=email, first_name=first_name, last_name=last_name)
+            user.set_unusable_password()  # can't log in until they register with this email
+            user.save()
+
         membership, created = Membership.objects.get_or_create(
             user=user, club=club, defaults={"role": role}
         )
         if not created:
-            raise ValidationError({"username": "That user is already on the roster."})
+            raise ValidationError({"detail": f"{user.username} is already on the roster."})
         return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["patch", "delete"], url_path="roster/(?P<membership_id>[^/.]+)")
