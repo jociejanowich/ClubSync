@@ -61,7 +61,7 @@ export default function ClubDetail() {
         {tab === "calendar" && (
           <CalendarTab clubId={clubId} isOfficer={isOfficer} currentUserId={user?.id} />
         )}
-        {tab === "roster" && <RosterTab clubId={clubId} isOfficer={isOfficer} />}
+        {tab === "roster" && <RosterTab clubId={clubId} isOfficer={isOfficer} currentUserId={user?.id} />}
       </div>
     </div>
   );

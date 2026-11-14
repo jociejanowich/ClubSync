@@ -12,6 +12,20 @@ export function setToken(token) {
   }
 }
 
+// Turns any DRF error shape into one readable sentence:
+// {"detail": "..."}, {"error": "..."}, or field errors like {"email": ["..."]}
+function errorMessage(data, status) {
+  if (!data) return `Request failed (${status})`;
+  if (typeof data === "string") return data;
+  if (data.detail) return String(data.detail);
+  if (data.error) return String(data.error);
+  const parts = Object.entries(data).map(([field, msgs]) => {
+    const text = Array.isArray(msgs) ? msgs.join(" ") : String(msgs);
+    return field === "non_field_errors" ? text : `${field.replace("_", " ")}: ${text}`;
+  });
+  return parts.join(" ") || `Request failed (${status})`;
+}
+
 async function request(path, { method = "GET", body } = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
@@ -29,9 +43,7 @@ async function request(path, { method = "GET", body } = {}) {
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
-    const message =
-      (data && (data.detail || JSON.stringify(data))) || `Request failed (${res.status})`;
-    throw new Error(message);
+    throw new Error(errorMessage(data, res.status));
   }
   return data;
 }
