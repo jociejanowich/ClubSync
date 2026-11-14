@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',  # stores login tokens
     'corsheaders',
     'accounts',
+    'clubs',
 ]
 AUTH_USER_MODEL = "accounts.User"
 
