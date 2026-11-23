@@ -79,7 +79,11 @@ export default function CalendarTab({ clubId, isOfficer, currentUserId }) {
     setSubmitting(true);
     setError("");
     try {
-      await api.createEvent({ ...form, club: Number(clubId) });
+      await api.createEvent({ 
+        ...form, 
+        start_time: new Date(form.start_time).toISOString(),
+        end_time: new Date(FormData.end_time).toISOString(),
+        club: Number(clubId)});
       setForm(EMPTY_FORM);
       setShowForm(false);
       await load();

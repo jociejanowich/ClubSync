@@ -125,14 +125,29 @@ class ClubViewSet(viewsets.ModelViewSet):
             membership = club.memberships.get(pk=membership_id)
         except Membership.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+        
+        is_last_officer = (
+            membership.role == "officer"
+            and club.membership.filter(role = "officer").count() <= 1
+        )
 
         if request.method == "DELETE":
+         if is_last_officer:
+            raise ValidationError(
+                {"detail": "A club needs at least one officer. Promote someone first."}
+            )
             membership.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # PATCH: change role / lead flag.
         role = request.data.get("role")
-        if role:
+        if role is not None:
+            if role not in dict(Membership.ROLE_CHOICES):
+                raise ValidationError ({"role": "Role must be Officer or General Member"})
+            if role != "officer" and is_last_officer:
+                raise ValidationError(
+                    {"detail": "A club needs at least one officer. Promote someone first"}
+                )
             membership.role = role
         if "is_lead" in request.data:
             membership.is_lead = bool(request.data["is_lead"])
@@ -231,11 +246,24 @@ class EventViewSet(viewsets.ModelViewSet):
         status_value = request.data.get("status", "present")
         method = request.data.get("method", "manual")
 
+        try:
+            member_id = int(member_id)
+        except (TypeError, ValueError):
+            raise ValidationError({"member_id": "member_id must be a number."})
+
         if membership.role != "officer":
-            if int(member_id) != request.user.id:
+            if member_id != request.user.id:
                 raise PermissionDenied("You can only check yourself in.")
             status_value = "present"
             method = "check_in"
+        else:
+            if status_value not in dict(AttendanceRecord.STATUS_CHOICES):
+                raise ValidationError({"status": "Status must be present or absent."})
+            if method not in dict(AttendanceRecord.METHOD_CHOICES):
+                raise ValidationError({"method": "Method must be manual, check_in or import."})
+            # Only people on this club's roster can have attendance recorded.
+            if not event.club.memberships.filter(user_id=member_id).exists():
+                raise ValidationError({"member_id": "That person is not on this club's roster."})
 
         record, _ = AttendanceRecord.objects.update_or_create(
             event=event,

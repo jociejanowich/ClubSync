@@ -81,7 +81,18 @@ class EventSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["created_by", "created_at"]
+        
+     def validate(self, attrs):
+        # On PATCH only one time may be sent, so fall back to the saved value.
+        start = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        if start and end and end <= start:
+            raise serializers.ValidationError({"detail": "End time must be after the start time."})
 
+        # An officer of one club must not be able to push an event into another club.
+        if self.instance is not None and "club" in attrs and attrs["club"] != self.instance.club:
+            raise serializers.ValidationError({"detail": "An event can't be moved to a different club."})
+        return attrs
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
     member = UserSerializer(read_only=True)
