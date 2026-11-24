@@ -82,7 +82,7 @@ class EventSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_by", "created_at"]
         
-     def validate(self, attrs):
+    def validate(self, attrs):
         # On PATCH only one time may be sent, so fall back to the saved value.
         start = attrs.get("start_time", getattr(self.instance, "start_time", None))
         end = attrs.get("end_time", getattr(self.instance, "end_time", None))
